@@ -1,6 +1,7 @@
 """Implementación del cliente unificado para Google Gemini."""
 
 import asyncio
+import contextlib
 from typing import AsyncGenerator, List, Optional, Tuple
 
 from google import genai
@@ -71,9 +72,15 @@ class GeminiClient(BaseLLMClient):
                 contents=contents,
                 config=gen_config,
             )
-            async for chunk in stream:
-                if chunk.text:
-                    yield chunk.text
+            # `stream` es un generador asíncrono sin close()/async with propio.
+            # contextlib.aclosing() garantiza que se llame a su aclose() al
+            # salir, aunque el consumidor corte antes de agotarlo o el event
+            # loop se cierre — evita el mismo tipo de RuntimeError que
+            # tuvimos con el stream de OpenAI.
+            async with contextlib.aclosing(stream) as safe_stream:
+                async for chunk in safe_stream:
+                    if chunk.text:
+                        yield chunk.text
         except (ClientError, ServerError, APIError) as e:
             yield f"[ERROR] {e}"
         except Exception as e:
@@ -105,3 +112,6 @@ class GeminiClient(BaseLLMClient):
     @staticmethod
     def _error(config: ModelConfig, message: str) -> ModelResponse:
         return ModelResponse(content="", provider="gemini", model=config.model, success=False, error=message)
+
+    async def aclose(self) -> None:
+        await self._client.aio.aclose()

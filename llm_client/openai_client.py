@@ -69,10 +69,16 @@ class OpenAIClient(BaseLLMClient):
                 max_tokens=config.max_tokens,
                 stream=True,
             )
-            async for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
+            # IMPORTANTE: usar `async with` para cerrar el stream explícitamente.
+            # Si no se cierra, el generador async interno de httpx puede quedar
+            # vivo hasta que Python lo fuerza a cerrar durante el shutdown del
+            # event loop, lo que dispara un RuntimeError en algunas versiones
+            # de httpcore/httpx (ver nota en la clase AnthropicClient).
+            async with stream:
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
         except (AuthenticationError, RateLimitError, APIConnectionError, APIError) as e:
             yield f"[ERROR] {e}"
         except Exception as e:
@@ -81,3 +87,6 @@ class OpenAIClient(BaseLLMClient):
     @staticmethod
     def _error(config: ModelConfig, message: str) -> ModelResponse:
         return ModelResponse(content="", provider="openai", model=config.model, success=False, error=message)
+
+    async def aclose(self) -> None:
+        await self._client.close()
