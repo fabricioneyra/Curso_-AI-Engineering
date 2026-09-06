@@ -47,8 +47,22 @@ async def main() -> None:
         max_tokens=300,
     )
 
-    await run_normal(manager, config)
-    await run_streaming(manager, config)
+    try:
+        await run_normal(manager, config)
+        await run_streaming(manager, config)
+    finally:
+        # Fundamental: cerrar la conexión HTTP explícitamente ANTES de que
+        # asyncio.run() cierre el event loop. Si no, algunos SDKs (sobre todo
+        # con streaming) pueden tirar un RuntimeError al hacer garbage
+        # collection de conexiones todavía abiertas.
+        await manager.aclose()
+        # Además: el pool de conexiones puede reutilizar la misma conexión
+        # TCP entre la llamada normal y la de streaming. Cerrar el cliente no
+        # siempre termina de limpiar esa conexión reutilizada de forma
+        # síncrona, así que le damos un instante al event loop para que
+        # complete esa limpieza pendiente antes de que asyncio.run() fuerce
+        # el cierre de generadores async que puedan haber quedado colgando.
+        await asyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
