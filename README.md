@@ -110,6 +110,23 @@ Esto no afecta a OpenAI: `temperature` se sigue enviando normalmente en
 `openai_client.py`. Gemini (agregado después) tampoco se ve afectado: su SDK
 sigue soportando `temperature` sin problema.
 
+## Manejo de secrets (API keys)
+
+Las keys nunca están hardcodeadas ni viajan como `str` común por el código:
+
+- **`LLMConfig`** (en `schemas.py`) las carga desde las variables de entorno
+  usando `SecretStr`, que las enmascara automáticamente en cualquier `print()`,
+  log o serialización (`SecretStr('**********')`). Solo se revela el valor
+  real con `.get_secret_value()`, de forma explícita.
+- **Validación temprana:** si al proveedor elegido le falta su key, `LLMConfig`
+  lanza un `ValueError` claro (ej. *"Falta la API key para 'openai'..."*) en
+  el momento de armar la configuración — **antes** de instanciar el cliente.
+  Sin esto, el programa explotaba con un error interno del SDK (`OpenAIError`,
+  poco claro) apenas alguien clonaba el repo sin configurar su `.env`.
+- `AsyncLLMManager` usa `LLMConfig.from_env(provider)` automáticamente; solo
+  se salta ese paso si le pasás una key a mano (`AsyncLLMManager(provider=...,
+  api_key=...)`), útil para tests.
+
 ## Nota sobre Gemini
 
 Al agregar el tercer proveedor aparecieron un par de diferencias más respecto
