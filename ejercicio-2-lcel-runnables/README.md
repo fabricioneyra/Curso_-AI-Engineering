@@ -89,6 +89,42 @@ asyncio.run(main())
   no recuperables como una API key inválida **no** se reintentan — se
   probó explícitamente que no consumen los 3 intentos en vano.
 
+## Nota sobre el manejo de textos ambiguos (sin tecnología mencionada)
+
+Durante la prueba de estrés (pasar un texto que no menciona ninguna tecnología,
+ej. *"El sistema tuvo un problema ayer..."*) detectamos que el modelo, presionado
+por la restricción `min_length=1` de `tecnologias`, completaba el campo con la
+palabra genérica tomada literalmente del texto (`"sistema"`) — algo que pasa la
+validación de Pydantic (es un string no vacío) pero no aporta información real.
+
+Para resolverlo, sin depender solo de "pedirle amablemente" al modelo que no lo
+haga:
+
+- Se reforzó la `description` del campo `tecnologias` en `schemas.py`, explicando
+  qué SÍ y qué NO cuenta como tecnología específica.
+- Se agregó un `@field_validator` que **rechaza activamente** una lista de
+  términos genéricos conocidos (`sistema`, `aplicación`, `plataforma`, etc.).
+  Combinado con `.with_retry()`, esto convierte una respuesta genérica en un
+  reintento real del LLM, no solo en una sugerencia que puede ignorar.
+
+Con este cambio, el mismo texto ambiguo pasó de devolver `"sistema"` a devolver
+`"backend"` — una inferencia más útil (indica la capa del sistema afectada) sin
+inventar un nombre de tecnología que el texto no menciona en absoluto.
+
+**Decisión consciente:** no llevamos el bloqueo más lejos (por ejemplo,
+prohibiendo también `"backend"`), porque el texto de entrada genuinamente no da
+ninguna pista más específica. Forzar al modelo a un nivel mayor de especificidad
+ahí lo llevaría a *alucinar* un nombre de producto o framework sin base real en
+el input — cambiaríamos "genérico pero honesto" por "específico pero inventado",
+que es peor. Es un trade-off consciente entre precisión y honestidad de la
+respuesta, no una limitación que se nos haya pasado por alto.
+
+**Alcance de "tecnologías":** además de herramientas/frameworks/lenguajes
+nombrados (ej. `MongoDB`), también cuentan patrones o mecanismos técnicos
+mencionados explícitamente en el texto (ej. `circuit breaker`) — la restricción
+es no usar palabras genéricas que no aporten información, no limitarlo
+únicamente a nombres de productos.
+
 ## Nota sobre `temperature` por proveedor
 
 Igual que en el Módulo 1: los modelos recientes de Anthropic (4.7+, incluido

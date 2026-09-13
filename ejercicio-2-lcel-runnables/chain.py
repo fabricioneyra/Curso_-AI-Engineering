@@ -1,9 +1,4 @@
-"""Cadena LCEL: Prompt -> LLM con salida estructurada -> validación -> reintento.
-
-Reutiliza la idea del Módulo 1 (elegir proveedor por variable de entorno,
-manejo cuidadoso de parámetros por-proveedor), pero acá con las piezas nativas
-de LangChain en vez del cliente async armado a mano.
-"""
+"""Cadena LCEL: Prompt -> LLM con salida estructurada -> validación -> reintento."""
 
 import logging
 import os
@@ -35,9 +30,18 @@ precisa:
 implicadas.
 - El nivel de criticidad de la situación descrita (baja, media o alta).
 - Un resumen técnico breve y concreto (1-2 oraciones).
+Reglas importantes para el campo "tecnologias":
+- Nombrá tecnologías CONCRETAS y específicas (ej. "FastAPI", "Redis", "Kubernetes"),
+nunca palabras genéricas tomadas literalmente del texto de entrada como "sistema",
+"aplicación", "plataforma" o "programa".
+- Si el texto no nombra ninguna tecnología explícita, inferí la categoría más
+específica y plausible que el contexto sugiera (ej. si se habla de un "checkout"
+con errores, "backend de e-commerce" es más específico que "sistema"). Basate
+solo en pistas reales del texto -- no inventes marcas o productos puntuales
+(como "Kubernetes" o "AWS") si no hay ninguna base en el texto para eso.
 
-Si el texto es ambiguo, hacé la mejor inferencia razonable a partir de lo que \
-está escrito. No inventes tecnologías que no estén mencionadas ni implícitas."""
+Si el texto es ambiguo en general, hacé la mejor inferencia razonable a partir \
+de lo que está escrito. No inventes hechos que no estén mencionados ni implícitos."""
 
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -53,7 +57,7 @@ def _build_model():
     provider = os.getenv("PROVIDER", "openai").lower()
 
     if provider == "openai":
-        return ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        return ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
 
     if provider == "anthropic":
         # Los modelos recientes de Anthropic (4.7+, incluido claude-sonnet-5) ya
